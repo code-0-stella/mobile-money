@@ -11,9 +11,12 @@ import { statsRoutes } from "./routes/stats";
 import { errorHandler } from "./middleware/errorHandler";
 import { connectRedis, redisClient } from "./config/redis";
 import { pool } from "./config/database";
-import { globalTimeout, haltOnTimedout, timeoutErrorHandler } from "./middleware/timeout";
+import {
+  globalTimeout,
+  haltOnTimedout,
+  timeoutErrorHandler,
+} from "./middleware/timeout";
 import { responseTime } from "./middleware/responseTime";
-import { createQueueDashboard, getQueueHealth, pauseQueueEndpoint, resumeQueueEndpoint } from "./queue";
 import {
   createQueueDashboard,
   getQueueHealth,
@@ -32,19 +35,15 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Rate limiter configuration
 const RATE_LIMIT_WINDOW_MS = parseInt(
   process.env.RATE_LIMIT_WINDOW_MS || "900000",
-); // 15 minutes
+);
 const RATE_LIMIT_MAX_REQUESTS = parseInt(
   process.env.RATE_LIMIT_MAX_REQUESTS || "100",
 );
 
 const limiter = rateLimit({
-  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
   windowMs: RATE_LIMIT_WINDOW_MS,
-  windowMs: RATE_LIMIT_WINDOW_MS, // 15 minutes
   max: RATE_LIMIT_MAX_REQUESTS,
   standardHeaders: true,
   legacyHeaders: false,
@@ -54,27 +53,25 @@ const limiter = rateLimit({
 app.use(metricsMiddleware);
 app.use(helmet());
 app.use(cors());
-
-// --- Updated: JSON body parser with size limit ---
-app.use(
-  express.json({
-    limit: process.env.REQUEST_SIZE_LIMIT || "10mb", // Default 10mb
-  })
-);
-
-// --- Optional: urlencoded parser with same limit ---
+app.use(express.json({ limit: process.env.REQUEST_SIZE_LIMIT || "10mb" }));
 app.use(
   express.urlencoded({
     limit: process.env.REQUEST_SIZE_LIMIT || "10mb",
     extended: true,
-  })
+  }),
 );
-
 app.use(limiter);
 app.use(responseTime);
 
-// Health & readiness
-app.get("/health", (req, res) => res.json({ status: "ok", timestamp: new Date().toISOString() }));
+// Prometheus metrics endpoint
+app.get("/metrics", async (req, res) => {
+  try {
+    res.set("Content-Type", register.contentType);
+    res.end(await register.metrics());
+  } catch (err) {
+    res.status(500).end(err);
+  }
+});
 
 // Basic health check
 app.get("/health", (req, res) => {
@@ -88,7 +85,6 @@ app.get("/health", (req, res) => {
 /**
  * Readiness probe (DB + Redis)
  */
-
 app.get("/ready", async (req, res) => {
   const checks: Record<string, string> = { database: "down", redis: "down" };
   let allReady = true;
@@ -118,7 +114,8 @@ app.get("/ready", async (req, res) => {
     status: allReady ? "ready" : "not ready",
     checks,
     timestamp: new Date().toISOString(),
-  });
+  };
+  res.status(allReady ? 200 : 503).json(response);
 });
 
 // Timeout middleware
@@ -137,16 +134,23 @@ app.get("/health/queue", getQueueHealth);
 app.post("/admin/queues/pause", pauseQueueEndpoint);
 app.post("/admin/queues/resume", resumeQueueEndpoint);
 
-// --- NEW: Global handler for payload too large ---
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  if (err.type === "entity.too.large") {
-    return res.status(413).json({
-      error: "Payload Too Large",
-      message: `Request exceeds the maximum size of ${process.env.REQUEST_SIZE_LIMIT || "10mb"}`,
-    });
-  }
-  next(err);
-});
+// Global handler for payload too large
+app.use(
+  (
+    err: Error & { type?: string },
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    if (err.type === "entity.too.large") {
+      return res.status(413).json({
+        error: "Payload Too Large",
+        message: `Request exceeds the maximum size of ${process.env.REQUEST_SIZE_LIMIT || "10mb"}`,
+      });
+    }
+    next(err);
+  },
+);
 
 // Error handlers
 app.use(timeoutErrorHandler);

@@ -5,6 +5,7 @@ import {
   getTransactionHandler,
   updateNotesHandler,
   searchTransactionsHandler,
+  validateTransaction,
 } from "../controllers/transactionController";
 import { TimeoutPresets, haltOnTimedout } from "../middleware/timeout";
 
@@ -16,7 +17,7 @@ transactionRoutes.post(
   TimeoutPresets.long,
   haltOnTimedout,
   validateTransaction,
-  depositHandler
+  depositHandler,
 );
 
 // Withdraw route
@@ -25,7 +26,7 @@ transactionRoutes.post(
   TimeoutPresets.long,
   haltOnTimedout,
   validateTransaction,
-  withdrawHandler
+  withdrawHandler,
 );
 
 // Quick read operation
