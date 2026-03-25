@@ -3,6 +3,8 @@ import {
   depositHandler,
   withdrawHandler,
   getTransactionHandler,
+  updateNotesHandler,
+  searchTransactionsHandler,
 } from "../controllers/transactionController";
 import { TimeoutPresets, haltOnTimedout } from "../middleware/timeout";
 
@@ -28,4 +30,19 @@ transactionRoutes.get(
   TimeoutPresets.quick,
   haltOnTimedout,
   getTransactionHandler,
+);
+
+// Notes and search
+transactionRoutes.patch(
+  "/:id/notes",
+  TimeoutPresets.quick,
+  haltOnTimedout,
+  updateNotesHandler,
+);
+
+transactionRoutes.get(
+  "/search",
+  TimeoutPresets.quick,
+  haltOnTimedout,
+  searchTransactionsHandler,
 );
