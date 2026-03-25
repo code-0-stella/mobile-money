@@ -32,7 +32,18 @@ export interface Transaction {
   tags: string[];
   notes?: string;
   admin_notes?: string;
+  webhook_delivery_status?: "pending" | "delivered" | "failed" | "skipped";
+  webhook_last_attempt_at?: Date | null;
+  webhook_delivered_at?: Date | null;
+  webhook_last_error?: string | null;
   createdAt: Date;
+}
+
+export interface WebhookDeliveryUpdate {
+  status: "pending" | "delivered" | "failed" | "skipped";
+  lastAttemptAt?: Date | null;
+  deliveredAt?: Date | null;
+  lastError?: string | null;
 }
 
 export class TransactionModel {
@@ -86,6 +97,28 @@ export class TransactionModel {
       status,
       id,
     ]);
+  }
+
+  async updateWebhookDelivery(
+    id: string,
+    delivery: WebhookDeliveryUpdate,
+  ): Promise<void> {
+    await pool.query(
+      `UPDATE transactions
+       SET webhook_delivery_status = $1,
+           webhook_last_attempt_at = $2,
+           webhook_delivered_at = $3,
+           webhook_last_error = $4,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $5`,
+      [
+        delivery.status,
+        delivery.lastAttemptAt ?? null,
+        delivery.deliveredAt ?? null,
+        delivery.lastError ?? null,
+        id,
+      ],
+    );
   }
 
   async findByReferenceNumber(

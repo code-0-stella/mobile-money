@@ -53,3 +53,16 @@ ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id);
 
 CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user_created ON transactions(user_id, created_at);
+
+ALTER TABLE transactions
+ADD COLUMN IF NOT EXISTS webhook_delivery_status VARCHAR(20) NOT NULL DEFAULT 'pending'
+CHECK (webhook_delivery_status IN ('pending', 'delivered', 'failed', 'skipped'));
+
+ALTER TABLE transactions
+ADD COLUMN IF NOT EXISTS webhook_last_attempt_at TIMESTAMP;
+
+ALTER TABLE transactions
+ADD COLUMN IF NOT EXISTS webhook_delivered_at TIMESTAMP;
+
+ALTER TABLE transactions
+ADD COLUMN IF NOT EXISTS webhook_last_error TEXT;

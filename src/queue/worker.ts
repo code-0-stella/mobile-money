@@ -8,10 +8,12 @@ import { queueOptions } from "./config";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { MobileMoneyService } from "../services/mobilemoney/mobileMoneyService";
 import { StellarService } from "../services/stellar/stellarService";
+import { notifyTransactionWebhook, WebhookService } from "../services/webhook";
 
 const transactionModel = new TransactionModel();
 const mobileMoneyService = new MobileMoneyService();
 const stellarService = new StellarService();
+const webhookService = new WebhookService();
 
 const workerOptions = {
   ...queueOptions,
@@ -69,6 +71,10 @@ export const transactionWorker = new Worker<
           transactionId,
           TransactionStatus.Completed,
         );
+        await notifyTransactionWebhook(transactionId, "transaction.completed", {
+          transactionModel,
+          webhookService,
+        });
 
         await job.updateProgress(100);
 
@@ -103,6 +109,10 @@ export const transactionWorker = new Worker<
           transactionId,
           TransactionStatus.Completed,
         );
+        await notifyTransactionWebhook(transactionId, "transaction.completed", {
+          transactionModel,
+          webhookService,
+        });
 
         await job.updateProgress(100);
 
@@ -121,6 +131,10 @@ export const transactionWorker = new Worker<
         transactionId,
         TransactionStatus.Failed,
       );
+      await notifyTransactionWebhook(transactionId, "transaction.failed", {
+        transactionModel,
+        webhookService,
+      });
       throw error;
     }
   },
