@@ -175,6 +175,13 @@ git commit -m "Your message" --no-verify
 - `POST /api/transactions/withdraw` - Withdraw from Stellar to mobile money
 - `GET /api/transactions/:id` - Get transaction status
 
+### Statistics & Metrics
+
+- `GET /api/stats` - Get system-wide statistics (Total transactions, success rate, total volume, active users, and volume by provider).
+- **Authentication**: Requires a valid administrative API key in the `X-API-Key` header.
+- **Cache**: Results are cached for 15 minutes.
+- **Filters**: Supports `startDate` and `endDate` query parameters (ISO format).
+
 ### GraphQL
 
 - `POST /graphql` (and Playground at `GET /graphql` in development)
