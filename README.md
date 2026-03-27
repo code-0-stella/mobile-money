@@ -114,6 +114,18 @@ npm run test:coverage
 npm run test:watch
 ```
 
+### End-to-end (Playwright) Tests
+
+```bash
+npm run test:e2e
+```
+
+CI command:
+
+```bash
+npm run test:e2e:ci
+```
+
 ### Verify CORS Preflight Caching
 
 The API sends `Access-Control-Max-Age` on successful preflight responses so

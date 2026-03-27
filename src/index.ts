@@ -28,6 +28,7 @@ import { reportsRoutes } from "./routes/reports";
 import { createKYCRoutes } from "./routes/kycRoutes";
 import { vaultRoutes } from "./routes/vaults";
 import { adminRoutes } from "./routes/admin";
+import { authRoutes } from "./routes/auth";
 import { errorHandler } from "./middleware/errorHandler";
 import {
   connectRedis,
@@ -191,6 +192,7 @@ app.use(haltOnTimedout);
 app.use(apiVersionMiddleware);
 app.use(validateVersionMiddleware);
 app.use("/oauth", createOAuthRouter());
+app.use("/api/auth", authRoutes);
 
 app.use("/api/v1/transactions", transactionRoutesV1);
 app.use("/api/v1/transactions", transactionDisputeRoutesV1);

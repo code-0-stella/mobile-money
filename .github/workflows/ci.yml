@@ -75,6 +75,20 @@ jobs:
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
 
+      - name: Run Playwright e2e tests
+        run: |
+          npx playwright install --with-deps
+          npm run build
+          npm run start &
+          APP_PID=$!
+          sleep 3
+          npm run test:e2e:ci
+          kill $APP_PID
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379
+          NODE_ENV: test
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
