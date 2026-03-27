@@ -4,6 +4,9 @@ import {
   generateUniqueFilename, 
   generateDisputeS3Key 
 } from "../middleware/disputeUpload";
+import { DisputeModel } from "../models/dispute";
+import { generateDisputeS3Key, generateUniqueFilename } from "../middleware/disputeUpload";
+import { validateDisputeEvidenceFile } from "../services/disputeS3Upload";
 
 describe("Advanced Dispute Resolution", () => {
   describe("DisputeStateMachine", () => {

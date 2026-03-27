@@ -1,4 +1,5 @@
 import {
+  Asset,
   Transaction,
   FeeBumpTransaction,
   Keypair,
@@ -269,6 +270,9 @@ export const createSimplePaymentWithFeeBump = async (
   const operation = Operation.payment({
     destination,
     asset: stellarAsset,
+    asset: asset === "native" 
+      ? Asset.native()
+      : new Asset(asset.code, asset.issuer),
     amount,
   });
 

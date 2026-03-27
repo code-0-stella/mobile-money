@@ -1,4 +1,6 @@
 import { Router, Request, Response } from "express"; // Removed NextFunction
+import { Router, Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import { v4 as uuidv4 } from "uuid";
 import { Keypair } from "stellar-sdk"; // Removed Asset and getStellarServer
 import rateLimit from "express-rate-limit";
@@ -326,6 +328,14 @@ const sep24Limiter = rateLimit({
   max: 10,
   message: { error: "Too many requests, please try again later" },
 });
+// Rate limiter for SEP-24 endpoints
+const sep24Limiter = (() => {
+  return rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    message: { error: "Too many requests, please try again later" },
+  });
+})();
 
 sep24Router.get("/info", async (_req: Request, res: Response) => {
   try {
