@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { runCleanupJob } from "./cleanupJob";
 import { runReportJob } from "./reportJob";
 import { runStatusCheckJob } from "./statusCheckJob";
+import { runDisputeSlaJob } from "./disputeSlaJob";
 
 interface JobConfig {
   name: string;
@@ -27,6 +28,12 @@ const JOBS: JobConfig[] = [
     // Every hour — flags stuck pending transactions
     schedule: process.env.STATUS_CHECK_CRON || "0 * * * *",
     handler: runStatusCheckJob,
+  },
+  {
+    name: "dispute-sla",
+    // Every hour — monitors dispute SLA compliance and sends warnings
+    schedule: process.env.DISPUTE_SLA_CRON || "0 * * * *",
+    handler: runDisputeSlaJob,
   },
 ];
 
