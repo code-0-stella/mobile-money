@@ -27,6 +27,7 @@ const TRANSACTION_SELECT_COLUMNS = `
   notes,
   admin_notes AS "adminNotes",
   COALESCE(metadata, '{}') AS metadata,
+  location_metadata AS "locationMetadata",
   user_id AS "userId",
   idempotency_key AS "idempotencyKey",
   idempotency_expires_at AS "idempotencyExpiresAt",
@@ -93,6 +94,14 @@ export interface Transaction {
   webhook_delivered_at?: Date | null;
   webhook_last_error?: string | null;
   metadata?: Record<string, unknown>;
+  /** Geolocation metadata captured at transaction creation time. */
+  locationMetadata?: {
+    country: string;
+    countryCode: string;
+    city: string;
+    isp: string;
+    status: "resolved" | "unknown" | "pending";
+  } | null;
 
   createdAt: Date;
   updatedAt?: Date | null;
@@ -114,6 +123,13 @@ export interface CreateTransactionInput {
   currency?: string;
   originalAmount?: string;
   convertedAmount?: string;
+  locationMetadata?: {
+    country: string;
+    countryCode: string;
+    city: string;
+    isp: string;
+    status: "resolved" | "unknown" | "pending";
+  } | null;
 }
 
 export interface WebhookDeliveryUpdate {
@@ -156,6 +172,12 @@ export function mapTransactionRow(
       !Array.isArray(r.metadata)
         ? (r.metadata as Record<string, unknown>)
         : {},
+    locationMetadata:
+      r.locationMetadata &&
+      typeof r.locationMetadata === "object" &&
+      !Array.isArray(r.locationMetadata)
+        ? (r.locationMetadata as Transaction["locationMetadata"])
+        : null,
     userId:
       db.user_id != null || r.userId != null
         ? String(db.user_id ?? r.userId)
@@ -184,9 +206,9 @@ export class TransactionModel {
            reference_number, type, amount, currency, original_amount, 
            converted_amount, phone_number, provider, stellar_address, 
            status, tags, notes, user_id, idempotency_key, 
-           idempotency_expires_at, metadata
+           idempotency_expires_at, metadata, location_metadata
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
         RETURNING *`,
       [
         referenceNumber,
@@ -205,6 +227,7 @@ export class TransactionModel {
         data.idempotencyKey ?? null,
         data.idempotencyExpiresAt ?? null,
         JSON.stringify(metadata),
+        data.locationMetadata ? JSON.stringify(data.locationMetadata) : null,
       ],
     );
 
@@ -226,110 +249,6 @@ export class TransactionModel {
    * Updated for Issue #243: Advanced Filtering
    */
   async list(
-    limit = 50,
-    offset = 0,
-    startDate?: string,
-    endDate?: string,
-    filters?: { 
-      minAmount?: number; 
-      maxAmount?: number; 
-      provider?: string; 
-      tags?: string[] 
-    }
-  ) {
-    const capped = Math.min(Math.max(limit, 1), 100);
-    const off = Math.max(offset, 0);
-
-    let query = "SELECT * FROM transactions WHERE 1=1";
-    const params: any[] = [];
-    let paramIndex = 1;
-
-    if (startDate) {
-      query += ` AND created_at >= $${paramIndex++}`;
-      params.push(new Date(startDate).toISOString());
-    }
-    if (endDate) {
-      query += ` AND created_at <= $${paramIndex++}`;
-      // Set to end of day to include all transactions on that date
-      const end = new Date(endDate);
-      end.setUTCHours(23, 59, 59, 999);
-      params.push(end.toISOString());
-    }
-
-    // New Advanced Filters
-    if (filters?.minAmount !== undefined) {
-      query += ` AND amount >= $${paramIndex++}`;
-      params.push(filters.minAmount);
-    }
-    if (filters?.maxAmount !== undefined) {
-      query += ` AND amount <= $${paramIndex++}`;
-      params.push(filters.maxAmount);
-    }
-    if (filters?.provider) {
-      query += ` AND provider = $${paramIndex++}`;
-      params.push(filters.provider);
-    }
-    if (filters?.tags && filters.tags.length > 0) {
-      query += ` AND tags @> $${paramIndex++}::text[]`;
-      params.push(filters.tags);
-    }
-
-    query += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-    params.push(capped, off);
-
-    const result = await pool.query(query, params);
-    return result.rows
-      .map((r) => mapTransactionRow(r))
-      .filter((t): t is Transaction => t !== null);
-  }
-
-  /** Updated for Issue #243: Advanced Filtering Count */
-  async count(
-    startDate?: string, 
-    endDate?: string,
-    filters?: { 
-      minAmount?: number; 
-      maxAmount?: number; 
-      provider?: string; 
-      tags?: string[] 
-    }
-  ): Promise<number> {
-    let query = "SELECT COUNT(*) FROM transactions WHERE 1=1";
-    const params: any[] = [];
-    let paramIndex = 1;
-
-    if (startDate) {
-      query += ` AND created_at >= $${paramIndex++}`;
-      params.push(new Date(startDate).toISOString());
-    }
-    if (endDate) {
-      query += ` AND created_at <= $${paramIndex++}`;
-      const end = new Date(endDate);
-      end.setUTCHours(23, 59, 59, 999);
-      params.push(end.toISOString());
-    }
-
-    // New Advanced Filters
-    if (filters?.minAmount !== undefined) {
-      query += ` AND amount >= $${paramIndex++}`;
-      params.push(filters.minAmount);
-    }
-    if (filters?.maxAmount !== undefined) {
-      query += ` AND amount <= $${paramIndex++}`;
-      params.push(filters.maxAmount);
-    }
-    if (filters?.provider) {
-      query += ` AND provider = $${paramIndex++}`;
-      params.push(filters.provider);
-    }
-    if (filters?.tags && filters.tags.length > 0) {
-      query += ` AND tags @> $${paramIndex++}::text[]`;
-      params.push(filters.tags);
-    }
-
-    const result = await pool.query(query, params);
-    return parseInt(result.rows[0].count);
-  }
 
   async updateStatus(id: string, status: TransactionStatus): Promise<void> {
     await pool.query(
