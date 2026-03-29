@@ -3,7 +3,7 @@ import { sep24RateLimiter } from "../middleware/rateLimit";
 import { v4 as uuidv4 } from "uuid";
 import { Transaction, Keypair, StrKey } from "stellar-sdk";
 import { getStellarServer, getNetworkPassphrase, STELLAR_NETWORKS } from "../config/stellar";
-import { Keypair } from "stellar-sdk";
+
 
 function isValidStellarPublicKey(key: string): boolean {
   try {
