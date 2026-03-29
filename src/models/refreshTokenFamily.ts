@@ -67,12 +67,11 @@ export class RefreshTokenFamilyModel {
 
       await client.query("BEGIN");
 
-      // Update DB
-      await pool.query(
-        `UPDATE refresh_token_families 
-        SET revoked_at = NOW(), is_active = FALSE 
-        WHERE id = $1`,
-        [family_id],
+      // Delete
+      const deleteResult = await client.query(
+        `DELETE FROM refresh_token_families
+         WHERE family_id = $1 AND user_id = $2`,
+        [familyId, userId],
       );
 
       await pool.query("COMMIT");
@@ -80,6 +79,7 @@ export class RefreshTokenFamilyModel {
       return {
         data: {
           familyId: family_id,
+          deleteResult: deleteResult.rowCount
         },
       };
     } catch (err: any) {
@@ -100,7 +100,7 @@ export class RefreshTokenFamilyModel {
 
       // Get all expired tokens
       const expiredTokenResult = await client.query(
-        `SELECT token_jti FROM refresh_token_families
+        `SELECT family_id FROM refresh_token_families
         WHERE revoked_at < NOW() - INTERVAL '30 days'`,
       );
 
@@ -126,7 +126,7 @@ export class RefreshTokenFamilyModel {
     }
   }
 
-  async revokeAll(userId: string, familyId: string) {
+  async revokeAll(userId: string) {
     const client = await pool.connect();
 
     try {
@@ -134,10 +134,9 @@ export class RefreshTokenFamilyModel {
 
       // Update DB
       const tokenResult = await pool.query(
-        `UPDATE refresh_token_families 
-        SET revoked_at = NOW(), is_active = FALSE 
-        WHERE family_id = $1 AND user_id = $2`,
-        [familyId, userId],
+        `DELETE FROM refresh_token_families 
+        WHERE user_id = $1`,
+        [userId],
       );
 
       await pool.query("COMMIT");
