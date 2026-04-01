@@ -56,7 +56,7 @@ export const createVault = async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation error",
-        details: error.errors.map(e => e.message).join(", "),
+        details: error.issues.map((e: z.ZodIssue) => e.message).join(", "),
       });
     }
 
@@ -163,7 +163,7 @@ export const updateVault = async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation error",
-        details: error.errors.map(e => e.message).join(", "),
+        details: error.issues.map((e: z.ZodIssue) => e.message).join(", "),
       });
     }
 
@@ -266,7 +266,7 @@ export const transferFunds = async (req: Request, res: Response) => {
     if (error instanceof z.ZodError) {
       return res.status(400).json({
         error: "Validation error",
-        details: error.errors.map(e => e.message).join(", "),
+        details: error.issues.map((e: z.ZodIssue) => e.message).join(", "),
       });
     }
 

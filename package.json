@@ -48,7 +48,7 @@
     "@bull-board/api": "^6.20.6",
     "@bull-board/express": "^6.20.6",
     "@sendgrid/mail": "^8.1.6",
-    "@sentry/node": "^10.46.0",
+    "@sentry/node": "^10.47.0",
     "@types/passport": "^1.0.17",
     "@types/passport-saml": "^1.1.7",
     "@types/speakeasy": "^2.0.10",
@@ -110,6 +110,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@aws-sdk/client-kms": "^3.1021.0",
     "@playwright/test": "^1.40.0",
     "@stryker-mutator/core": "^9.6.0",
     "@stryker-mutator/jest-runner": "^9.6.0",
@@ -132,6 +133,7 @@
     "@types/node-cache": "^4.2.5",
     "@types/node-cron": "^3.0.11",
     "@types/nodemailer": "^7.0.11",
+    "@types/pdfkit": "^0.17.5",
     "@types/pg": "^8.10.9",
     "@types/qrcode": "^1.5.5",
     "@types/redis": "^4.0.11",

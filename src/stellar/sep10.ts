@@ -41,38 +41,38 @@ export interface Sep10VerifyParams {
 // Configuration
 // ============================================================================
 
-const CHALLENGE_EXPIRY_SECONDS = 300; // 5 minutes
-const JWT_EXPIRY_SECONDS = 86400; // 24 hours
-const MAX_FEE = 100000; // 0.1 XLM in stroops
+export interface Sep10Config {
+  signingKey: string;
+  webAuthDomain: string;
+  networkPassphrase: string;
+  jwtSecret: string;
+  challengeExpiresIn: number;
+  jwtExpiresIn: string;
+  homeDomain: string;
+}
 
-/**
- * Get the signing key for the server
- * This is the secret key used to sign challenge transactions
- */
-function getSigningKey(): string {
-  const signingKey = process.env.STELLAR_SIGNING_KEY;
+export function getSep10Config(): Sep10Config {
+  const signingKey = process.env.STELLAR_SIGNING_KEY || process.env.STELLAR_ISSUER_SECRET;
   if (!signingKey) {
-    throw new Error("STELLAR_SIGNING_KEY environment variable is not set");
+    throw new Error("STELLAR_SIGNING_KEY or STELLAR_ISSUER_SECRET must be defined");
   }
-  return signingKey;
-}
 
-/**
- * Get the JWT secret for token signing
- */
-function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET environment variable is not set");
+  // Validate the signing key format
+  try {
+    StellarSdk.Keypair.fromSecret(signingKey);
+  } catch (error) {
+    throw new Error("Invalid STELLAR_SIGNING_KEY or STELLAR_ISSUER_SECRET format");
   }
-  return secret;
-}
 
-/**
- * Get the home domain for the server
- */
-function getHomeDomain(): string {
-  return process.env.STELLAR_HOME_DOMAIN || "api.mobilemoney.com";
+  return {
+    signingKey,
+    webAuthDomain: process.env.WEB_AUTH_DOMAIN || "https://api.mobilemoney.com",
+    networkPassphrase: getNetworkPassphrase(),
+    jwtSecret: process.env.JWT_SECRET || "default-jwt-secret",
+    challengeExpiresIn: 900, // 15 minutes
+    jwtExpiresIn: "1h",
+    homeDomain: process.env.STELLAR_HOME_DOMAIN || "api.mobilemoney.com",
+  };
 }
 
 // ============================================================================
@@ -80,175 +80,205 @@ function getHomeDomain(): string {
 // ============================================================================
 
 export class Sep10Service {
-  private server: StellarSdk.Horizon.Server;
-  private networkPassphrase: string;
+  private config: Sep10Config;
+  private serverKeypair: StellarSdk.Keypair;
 
-  constructor() {
-    this.server = getStellarServer();
-    this.networkPassphrase = getNetworkPassphrase();
+  constructor(config: Sep10Config) {
+    this.config = config;
+    this.serverKeypair = StellarSdk.Keypair.fromSecret(config.signingKey);
+  }
+
+  static isValidPublicKey(publicKey: string): boolean {
+    try {
+      return StellarSdk.StrKey.isValidEd25519PublicKey(publicKey);
+    } catch {
+      return false;
+    }
+  }
+
+  getServerPublicKey(): string {
+    return this.serverKeypair.publicKey();
   }
 
   /**
    * Generate a challenge transaction for SEP-10 authentication
    * 
-   * @param params - Challenge parameters including account, home_domain, client_domain, memo
+   * @param clientPublicKey - The client's Stellar public key
+   * @param homeDomain - Optional home domain (defaults to config)
    * @returns Challenge response with transaction XDR and network passphrase
    */
-  async generateChallenge(params: Sep10ChallengeParams): Promise<Sep10ChallengeResponse> {
-    const { account, home_domain, client_domain, memo } = params;
-
+  generateChallenge(clientPublicKey: string, homeDomain?: string): Sep10ChallengeResponse {
     // Validate account address
-    if (!StellarSdk.StrKey.isValidEd25519PublicKey(account)) {
-      throw new Error("Invalid Stellar account address");
+    if (!Sep10Service.isValidPublicKey(clientPublicKey)) {
+      throw new Error("Invalid Stellar public key");
     }
 
-    // Load the server's signing account
-    const signingKey = getSigningKey();
-    const serverKeypair = StellarSdk.Keypair.fromSecret(signingKey);
-    const serverAccount = await this.server.loadAccount(serverKeypair.publicKey());
+    const domain = homeDomain || this.config.homeDomain;
+    const now = Math.floor(Date.now() / 1000);
+    const timebounds = {
+      minTime: String(now),
+      maxTime: String(now + this.config.challengeExpiresIn),
+    };
 
-    // Generate a random memo for the challenge transaction
-    const memoId = memo || uuidv4();
+    // Create a source account with sequence number 0
+    const sourceAccount = new StellarSdk.Account(clientPublicKey, "-1");
 
-    // Create the challenge transaction
-    const transaction = new StellarSdk.TransactionBuilder(serverAccount, {
-      fee: MAX_FEE.toString(),
-      networkPassphrase: this.networkPassphrase,
-    })
-      // Add the client's account as a source account
-      .addOperation(
-        StellarSdk.Operation.manageData({
-          source: account,
-          name: `${getHomeDomain()} auth`,
-          value: memoId,
-        })
-      )
-      // Add a timebound to make the transaction expire
-      .addMemo(StellarSdk.Memo.text(memoId))
-      .setTimeout(CHALLENGE_EXPIRY_SECONDS)
-      .build();
+    // Generate random nonce
+    const nonce = Buffer.alloc(64);
+    for (let i = 0; i < 64; i++) {
+      nonce[i] = Math.floor(Math.random() * 256);
+    }
 
-    // Sign the transaction with the server's key
-    transaction.sign(serverKeypair);
+    // Build the transaction
+    let builder = new StellarSdk.TransactionBuilder(sourceAccount, {
+      fee: "100",
+      networkPassphrase: this.config.networkPassphrase,
+      timebounds,
+    });
 
-    // Return the transaction XDR and network passphrase
+    // Add memo
+    const memoBytes = Buffer.alloc(32);
+    for (let i = 0; i < 32; i++) {
+      memoBytes[i] = Math.floor(Math.random() * 256);
+    }
+    builder = builder.addMemo(new StellarSdk.Memo(StellarSdk.MemoHash, memoBytes));
+
+    // Add manageData operation for client
+    builder = builder.addOperation(
+      StellarSdk.Operation.manageData({
+        name: `${domain} auth`,
+        value: nonce,
+        source: clientPublicKey,
+      })
+    );
+
+    // Add web_auth_domain operation from server
+    builder = builder.addOperation(
+      StellarSdk.Operation.manageData({
+        name: "web_auth_domain",
+        value: this.config.webAuthDomain,
+        source: this.serverKeypair.publicKey(),
+      })
+    );
+
+    const transaction = builder.build();
+    transaction.sign(this.serverKeypair);
+
     return {
       transaction: transaction.toXDR(),
-      network_passphrase: this.networkPassphrase,
+      network_passphrase: this.config.networkPassphrase,
     };
   }
 
   /**
    * Verify a signed challenge transaction and issue a JWT token
    * 
-   * @param params - Verify parameters including the signed transaction XDR
+   * @param transactionXDR - The signed transaction XDR
+   * @param clientAccountID - Optional client account ID for validation
    * @returns JWT token response
    */
-  async verifyChallenge(params: Sep10VerifyParams): Promise<Sep10TokenResponse> {
-    const { transaction: transactionXDR } = params;
-
+  verifyChallenge(transactionXDR: string, clientAccountID?: string): Sep10TokenResponse {
     // Parse the transaction from XDR
     let transaction: StellarSdk.Transaction;
     try {
-      transaction = new StellarSdk.Transaction(
+      transaction = StellarSdk.TransactionBuilder.fromXDR(
         transactionXDR,
-        this.networkPassphrase
-      );
+        this.config.networkPassphrase
+      ) as StellarSdk.Transaction;
     } catch (error) {
-      throw new Error("Invalid transaction XDR");
+      throw new Error("Invalid transaction envelope");
     }
 
-    // Verify the transaction is signed by the server
-    const signingKey = getSigningKey();
-    const serverKeypair = StellarSdk.Keypair.fromSecret(signingKey);
-    
-    if (!transaction.signatures.some(sig => 
-      sig.hint().equals(serverKeypair.signatureHint())
-    )) {
+    // Verify sequence number is 0
+    if (transaction.sequence !== "0") {
+      throw new Error("Transaction sequence number must be 0");
+    }
+
+    // Verify timebounds
+    const timeBounds = transaction.timeBounds;
+    if (!timeBounds) {
+      throw new Error("Transaction must have timebounds");
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const minTime = parseInt(timeBounds.minTime, 10);
+    const maxTime = parseInt(timeBounds.maxTime, 10);
+
+    if (now < minTime) {
+      throw new Error("Transaction is not yet valid");
+    }
+
+    if (now > maxTime) {
+      throw new Error("Transaction has expired");
+    }
+
+    // Verify all operations are manageData
+    if (!transaction.operations.every(op => op.type === "manageData")) {
+      throw new Error("Transaction must contain only manageData operations");
+    }
+
+    // Extract client public key from first operation
+    const firstOp = transaction.operations[0];
+    const clientPublicKey = firstOp.source || transaction.source;
+
+    if (clientAccountID && clientPublicKey !== clientAccountID) {
+      throw new Error("First manageData operation source must match client account");
+    }
+
+    // Verify server signature
+    const txHash = transaction.hash();
+    const serverSigned = transaction.signatures.some(sig => {
+      try {
+        return this.serverKeypair.verify(txHash, sig.signature());
+      } catch {
+        return false;
+      }
+    });
+
+    if (!serverSigned) {
       throw new Error("Transaction is not signed by the server");
     }
 
-    // Verify the transaction has not expired
-    const timeBounds = transaction.timeBounds;
-    if (timeBounds) {
-      const now = Math.floor(Date.now() / 1000);
-      if (now > parseInt(timeBounds.maxTime)) {
-        throw new Error("Challenge transaction has expired");
-      }
-    }
-
-    // Extract the client's public key from the transaction
-    // The client's account should be the source account of the manageData operation
-    const manageDataOps = transaction.operations.filter(
-      op => op.type === "manageData"
-    );
-
-    if (manageDataOps.length === 0) {
-      throw new Error("Transaction does not contain a manageData operation");
-    }
-
-    const clientPublicKey = manageDataOps[0].source;
-    if (!clientPublicKey) {
-      throw new Error("manageData operation does not have a source account");
-    }
-
-    // Verify the client's signature on the transaction
+    // Verify client signature
     const clientKeypair = StellarSdk.Keypair.fromPublicKey(clientPublicKey);
-    
-    // Check if the transaction is signed by the client
-    const isClientSigned = transaction.signatures.some(sig => {
+    const clientSigned = transaction.signatures.some(sig => {
       try {
-        // Verify the signature using the client's public key
-        const txHash = transaction.hash();
         return clientKeypair.verify(txHash, sig.signature());
       } catch {
         return false;
       }
     });
 
-    if (!isClientSigned) {
-      throw new Error("Transaction is not signed by the client");
-    }
-
-    // Verify the transaction is signed by the server
-    const isServerSigned = transaction.signatures.some(sig => {
-      try {
-        const txHash = transaction.hash();
-        return serverKeypair.verify(txHash, sig.signature());
-      } catch {
-        return false;
-      }
-    });
-
-    if (!isServerSigned) {
-      throw new Error("Transaction is not signed by the server");
+    if (!clientSigned) {
+      throw new Error("Transaction is not signed by the client account");
     }
 
     // Issue a JWT token
-    const token = this.issueToken(clientPublicKey);
-
-    return { token };
+    return this.issueToken(clientPublicKey);
   }
 
   /**
    * Issue a JWT token for the authenticated client
    * 
    * @param clientPublicKey - The Stellar public key of the authenticated client
-   * @returns JWT token string
+   * @returns JWT token response
    */
-  private issueToken(clientPublicKey: string): string {
-    const jwtSecret = getJwtSecret();
-    const homeDomain = getHomeDomain();
+  issueToken(clientPublicKey: string): Sep10TokenResponse {
+    const iat = Math.floor(Date.now() / 1000);
+    const exp = iat + 3600; // 1 hour from now
 
     const payload = {
-      iss: homeDomain,
       sub: clientPublicKey,
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + JWT_EXPIRY_SECONDS,
+      iss: this.config.webAuthDomain,
+      iat,
+      exp,
       jti: uuidv4(),
+      home_domain: this.config.homeDomain,
     };
 
-    return jwt.sign(payload, jwtSecret, { algorithm: "HS256" });
+    const token = jwt.sign(payload, this.config.jwtSecret, { algorithm: "HS256" });
+
+    return { token };
   }
 
   /**
@@ -258,10 +288,8 @@ export class Sep10Service {
    * @returns Decoded token payload
    */
   verifyToken(token: string): jwt.JwtPayload {
-    const jwtSecret = getJwtSecret();
-    
     try {
-      const decoded = jwt.verify(token, jwtSecret, { algorithms: ["HS256"] });
+      const decoded = jwt.verify(token, this.config.jwtSecret, { algorithms: ["HS256"] });
       return decoded as jwt.JwtPayload;
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {
@@ -269,7 +297,7 @@ export class Sep10Service {
       } else if (error instanceof jwt.JsonWebTokenError) {
         throw new Error("Invalid token");
       } else {
-        throw new Error("Token verification failed");
+        throw new Error("Invalid token");
       }
     }
   }
@@ -279,9 +307,20 @@ export class Sep10Service {
 // SEP-10 Router
 // ============================================================================
 
-export function createSep10Router(): Router {
+export function createSep10Router(service?: Sep10Service): Router {
   const router = Router();
-  const sep10Service = new Sep10Service();
+  
+  // Only create service if not provided and config is valid
+  let sep10Service: Sep10Service | null = service || null;
+  
+  if (!sep10Service) {
+    try {
+      sep10Service = new Sep10Service(getSep10Config());
+    } catch (error) {
+      console.warn("[SEP-10] Failed to initialize SEP-10 service:", error);
+      // Service will be null, routes will return 503
+    }
+  }
 
   /**
    * GET /auth
@@ -289,35 +328,37 @@ export function createSep10Router(): Router {
    * SEP-10 challenge endpoint
    * Returns a challenge transaction for the client to sign
    */
-  router.get("/auth", async (req: Request, res: Response) => {
+  router.get("/auth", (req: Request, res: Response) => {
+    if (!sep10Service) {
+      return res.status(503).json({
+        error: "SEP-10 service not configured",
+      });
+    }
+
     try {
-      const { account, home_domain, client_domain, memo } = req.query;
+      const { account, home_domain } = req.query;
 
       // Validate required parameters
       if (!account || typeof account !== "string") {
         return res.status(400).json({
-          error: "Missing required parameter: account",
+          error: "account parameter is required",
         });
       }
 
       // Generate the challenge transaction
-      const challenge = await sep10Service.generateChallenge({
+      const challenge = sep10Service.generateChallenge(
         account,
-        home_domain: home_domain as string | undefined,
-        client_domain: client_domain as string | undefined,
-        memo: memo as string | undefined,
-      });
+        home_domain as string | undefined
+      );
 
       return res.json(challenge);
     } catch (error) {
       console.error("[SEP-10] Error generating challenge:", error);
       
       if (error instanceof Error) {
-        if (error.message.includes("Invalid Stellar account address")) {
-          return res.status(400).json({
-            error: "Invalid Stellar account address",
-          });
-        }
+        return res.status(400).json({
+          error: error.message,
+        });
       }
 
       return res.status(500).json({
@@ -332,47 +373,34 @@ export function createSep10Router(): Router {
    * SEP-10 verification endpoint
    * Verifies the signed challenge transaction and issues a JWT token
    */
-  router.post("/auth", async (req: Request, res: Response) => {
+  router.post("/auth", (req: Request, res: Response) => {
+    if (!sep10Service) {
+      return res.status(503).json({
+        error: "SEP-10 service not configured",
+      });
+    }
+
     try {
       const { transaction } = req.body;
 
       // Validate required parameters
       if (!transaction || typeof transaction !== "string") {
         return res.status(400).json({
-          error: "Missing required parameter: transaction",
+          error: "transaction parameter is required",
         });
       }
 
       // Verify the challenge and issue a token
-      const tokenResponse = await sep10Service.verifyChallenge({
-        transaction,
-      });
+      const tokenResponse = sep10Service.verifyChallenge(transaction);
 
       return res.json(tokenResponse);
     } catch (error) {
       console.error("[SEP-10] Error verifying challenge:", error);
       
       if (error instanceof Error) {
-        if (error.message.includes("Invalid transaction XDR")) {
-          return res.status(400).json({
-            error: "Invalid transaction XDR",
-          });
-        }
-        if (error.message.includes("not signed by the server")) {
-          return res.status(400).json({
-            error: "Transaction is not signed by the server",
-          });
-        }
-        if (error.message.includes("not signed by the client")) {
-          return res.status(400).json({
-            error: "Transaction is not signed by the client",
-          });
-        }
-        if (error.message.includes("expired")) {
-          return res.status(400).json({
-            error: "Challenge transaction has expired",
-          });
-        }
+        return res.status(400).json({
+          error: error.message,
+        });
       }
 
       return res.status(500).json({
@@ -381,8 +409,26 @@ export function createSep10Router(): Router {
     }
   });
 
+  /**
+   * GET /auth/health
+   * 
+   * Health check endpoint
+   */
+  router.get("/auth/health", (req: Request, res: Response) => {
+    if (!sep10Service) {
+      return res.status(503).json({
+        status: "unavailable",
+        service: "SEP-10 Authentication",
+        error: "Service not configured",
+      });
+    }
+
+    return res.json({
+      status: "ok",
+      service: "SEP-10 Authentication",
+      server_key: sep10Service.getServerPublicKey(),
+    });
+  });
+
   return router;
 }
-
-// Export singleton instance
-export const sep10Service = new Sep10Service();
