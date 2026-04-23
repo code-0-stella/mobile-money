@@ -113,6 +113,26 @@ export class OrangeProvider {
     }
   }
 
+  async getTransactionStatus(
+    reference: string,
+  ): Promise<{ status: "completed" | "failed" | "pending" | "unknown" }> {
+    try {
+      const result = await this.checkStatus(reference);
+      if (!result.success) return { status: "unknown" };
+      const providerStatus = String(
+        (result.data as Record<string, unknown>)?.status ?? "",
+      ).toUpperCase();
+      if (providerStatus === "SUCCESS" || providerStatus === "SUCCESSFUL")
+        return { status: "completed" };
+      if (providerStatus === "FAILED" || providerStatus === "FAILURE")
+        return { status: "failed" };
+      if (providerStatus === "PENDING") return { status: "pending" };
+      return { status: "unknown" };
+    } catch {
+      return { status: "unknown" };
+    }
+  }
+
   /**
    * Check payment/disbursement status by reference
    */
