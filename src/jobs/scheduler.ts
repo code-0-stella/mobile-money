@@ -12,6 +12,7 @@ import { createPagerDutyService } from "../services/pagerDutyService";
 import { runProviderBalanceAlertJob } from "./balances";
 import { runProviderHealthCheckJob } from "./providerHealthCheck";
 import { runAccountingWebhookJob } from "./accountingWebhookJob";
+import { runLpRebalanceJob } from "./lpRebalanceJob";
 
 interface JobConfig {
   name: string;
@@ -79,6 +80,12 @@ const JOBS: JobConfig[] = [
     // Every minute - syncs completed transactions to QuickBooks / Xero
     schedule: process.env.ACCOUNTING_WEBHOOK_CRON || "* * * * *",
     handler: runAccountingWebhookJob,
+  },
+  {
+    name: "lp-rebalance",
+    // Every 5 minutes - rebalances distribution account reserves via Stellar LPs
+    schedule: process.env.LP_REBALANCE_CRON || "*/5 * * * *",
+    handler: runLpRebalanceJob,
   },
 ];
 
