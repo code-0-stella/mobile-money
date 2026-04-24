@@ -77,6 +77,7 @@ import { startJobs } from "./jobs/scheduler";
 // 1. Import Sentry Middleware
 import { initSentry, sentryBreadcrumbMiddleware } from "./middleware/sentry";
 import { WebSocketManager } from "./websocket";
+import { layeredCache } from "./services/layeredCache";
 
 dotenv.config();
 
@@ -495,6 +496,9 @@ async function initializeRuntime(): Promise<void> {
   try {
     await connectRedis();
     console.log("Redis initialized");
+
+    await layeredCache.init();
+    console.log("Layered cache (L1/L2) initialized");
 
     const { startProviderBalanceAlertWorker, scheduleProviderBalanceAlertJob } =
       await import("./queue");
