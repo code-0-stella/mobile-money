@@ -52,25 +52,51 @@ class MobileMoneyError extends Error {
  * Heavy modules are loaded ONLY when needed
  */
 async function loadProvider(key: string): Promise<MobileMoneyProvider> {
+  let provider: MobileMoneyProvider;
+
   switch (key) {
     case "mtn": {
       const mod = await import("./providers/mtn");
-      return new mod.MTNProvider();
+      provider = new mod.MTNProvider();
+      break;
     }
 
     case "airtel": {
       const mod = await import("./providers/airtel");
-      return new mod.AirtelService();
+      provider = new mod.AirtelService() as any; // Cast as any if interface doesn't match perfectly
+      break;
     }
 
     case "orange": {
       const mod = await import("./providers/orange");
-      return new mod.OrangeProvider();
+      provider = new mod.OrangeProvider();
+      break;
+    }
+
+    case "mock": {
+      const mod = await import("./providers/mock");
+      provider = new mod.MockProvider();
+      break;
     }
 
     default:
       throw new Error(`Unknown provider: ${key}`);
   }
+
+  // Inject chaos middleware if enabled (usually in staging/test)
+  const chaosEnabled = process.env.ENABLE_PROVIDER_CHAOS === "true";
+  if (chaosEnabled) {
+    const { ChaosMiddleware } = await import("./providers/chaos");
+    provider = new ChaosMiddleware(provider, {
+      enabled: true,
+      latencyChance: parseFloat(process.env.CHAOS_LATENCY_CHANCE || "0.1"),
+      latencyMs: parseInt(process.env.CHAOS_LATENCY_MS || "5000", 10),
+      errorChance: parseFloat(process.env.CHAOS_500_CHANCE || "0.05"),
+      dropChance: parseFloat(process.env.CHAOS_DROP_CHANCE || "0.02"),
+    });
+  }
+
+  return provider;
 }
 
 export class MobileMoneyService {
