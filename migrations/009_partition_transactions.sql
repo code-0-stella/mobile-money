@@ -54,6 +54,9 @@ END$$;
 --   The idempotency unique index is also dropped for the same reason.
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- Drop foreign key constraints that depend on transactions_pkey
+ALTER TABLE disputes DROP CONSTRAINT IF EXISTS disputes_transaction_id_fkey;
+
 -- Drop PRIMARY KEY (recreated as a plain index on the parent after attach)
 ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_pkey;
 
@@ -195,3 +198,10 @@ DROP TRIGGER IF EXISTS transactions_updated_at ON transactions;
 CREATE TRIGGER transactions_updated_at
   BEFORE UPDATE ON transactions
   FOR EACH ROW EXECUTE FUNCTION update_transactions_updated_at();
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Step 9: Recreate foreign key constraints that were dropped in Step 1.
+-- ─────────────────────────────────────────────────────────────────────────────
+ALTER TABLE disputes
+  ADD CONSTRAINT disputes_transaction_id_fkey
+  FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE RESTRICT;

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { stellarRateLimiter } from "../middleware/rateLimit";
+import { sep24RateLimiter as stellarRateLimiter } from "../middleware/rateLimit";
 import NodeCache from "node-cache";
 import { StrKey, Horizon } from "stellar-sdk";
 
@@ -32,8 +32,8 @@ router.get(
 
     //Check cache
     const cached = cache.get(address);
-    if (cached) {
-      return res.json({ ...cached, cached: true });
+    if (cached && typeof cached === "object") {
+      return res.json({ ...(cached as Record<string, unknown>), cached: true });
     }
 
     try {

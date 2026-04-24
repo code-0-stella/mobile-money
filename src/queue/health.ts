@@ -1,6 +1,5 @@
 import { Request, Response } from "express";
 import { getQueueStats, pauseQueue, resumeQueue } from "./transactionQueue";
-import { transactionQueue, getQueueStats } from "./transactionQueue";
 import { providerBalanceAlertQueue } from "./providerBalanceAlertQueue";
 import { QueueHealthResponse, QueueActionResponse } from "../types/api";
 

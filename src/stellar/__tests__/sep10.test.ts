@@ -461,7 +461,7 @@ describe("SEP-10 Stellar Authentication", () => {
         const decoded = service.verifyToken(response.token);
         expect(decoded.iat).toBeGreaterThanOrEqual(before);
         expect(decoded.iat).toBeLessThanOrEqual(after);
-        expect(decoded.exp).toBe(decoded.iat + 3600);
+        expect(decoded.exp).toBe((decoded.iat || 0) + 3600);
       });
     });
 

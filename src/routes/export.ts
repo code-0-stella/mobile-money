@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { exportRateLimiter } from "../middleware/rateLimit";
+import { rateLimitExport as exportRateLimiter } from "../middleware/rateLimit";
 import QueryStream from "pg-query-stream";
 import { pipeline, Transform } from "stream";
 import { pool } from "../config/database";

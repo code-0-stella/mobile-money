@@ -3,6 +3,7 @@ import { sep31RateLimiter } from "../middleware/rateLimit";
 import crypto from "crypto";
 import { TransactionModel, TransactionStatus } from "../models/transaction";
 import { getConfiguredPaymentAsset } from "../services/stellar/assetService";
+import  rateLimit from "express-rate-limit";
 
 const router = Router();
 const transactionModel = new TransactionModel();
@@ -445,5 +446,5 @@ router.patch("/transactions/:id", sep31WriteLimiter, async (req: Request, res: R
   }
 });
 
-export { Sep31Status, SEP31_CONFIG, calculateFee, mapToSep31Status, isValidTransition, VALID_TRANSITIONS };
+export { SEP31_CONFIG, calculateFee, mapToSep31Status, isValidTransition, VALID_TRANSITIONS };
 export default router;
