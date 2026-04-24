@@ -70,6 +70,8 @@ import sep38Router from "./stellar/sep38";
 import { createSep12Router } from "./stellar/sep12";
 import { createSep10Router } from "./stellar/sep10";
 import tomlRouter from "./routes/toml";
+import feesRouter from "./routes/fees";
+import feeStrategiesRouter from "./routes/feeStrategies";
 
 // 1. Import Sentry Middleware
 import { initSentry, sentryBreadcrumbMiddleware } from "./middleware/sentry";
@@ -345,6 +347,8 @@ app.use("/api/reports", reportsRoutes);
 app.use("/api/statements", statementsRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/kyc", createKYCRoutes(pool));
+app.use("/api/fees", feesRouter);
+app.use("/api/fee-strategies", feeStrategiesRouter);
 
 // GDPR
 app.use("/api/gdpr", privacyRoutes);
