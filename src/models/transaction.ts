@@ -278,13 +278,14 @@ export class TransactionModel {
     return result.rows;
   }
 
-  async findById(id: string): Promise<Transaction | null> {
-    const result = await queryRead<Transaction>(
-      `SELECT ${TRANSACTION_SELECT_COLUMNS}
-        FROM transactions
-        WHERE id = $1`,
-      [id],
-    );
+  async findById(id: string, userId?: string): Promise<Transaction | null> {
+    let query = `SELECT ${TRANSACTION_SELECT_COLUMNS} FROM transactions WHERE id = $1`;
+    const params: unknown[] = [id];
+    if (userId) {
+      query += ` AND user_id = $2`;
+      params.push(userId);
+    }
+    const result = await queryRead<Transaction>(query, params);
 
     return mapTransactionRow(result.rows[0]);
   }
@@ -413,14 +414,18 @@ export class TransactionModel {
     return parseInt(result.rows[0].count);
   }
 
-  async updateStatus(id: string, status: TransactionStatus): Promise<void> {
+  async updateStatus(id: string, status: TransactionStatus, userId?: string): Promise<void> {
+    let query = `UPDATE transactions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`;
+    const params: unknown[] = [status, id];
+    if (userId) {
+      query += ` AND user_id = $3`;
+      params.push(userId);
+    }
+    query += ` RETURNING user_id, reference_number, updated_at`;
+
     const result = await queryWrite<{ user_id: string | null; reference_number: string; updated_at: Date }>(
-      `UPDATE transactions
-       SET status = $1,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2
-       RETURNING user_id, reference_number, updated_at`,
-      [status, id],
+      query,
+      params,
     );
 
     if (result.rowCount === 0) {
@@ -480,23 +485,27 @@ export class TransactionModel {
   async updateWebhookDelivery(
     id: string,
     delivery: WebhookDeliveryUpdate,
+    userId?: string,
   ): Promise<void> {
-    await queryWrite(
-      `UPDATE transactions
+    let query = `UPDATE transactions
         SET webhook_delivery_status = $1,
             webhook_last_attempt_at = $2,
             webhook_delivered_at = $3,
             webhook_last_error = $4,
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $5`,
-      [
-        delivery.status,
-        delivery.lastAttemptAt ?? null,
-        delivery.deliveredAt ?? null,
-        delivery.lastError ?? null,
-        id,
-      ],
-    );
+        WHERE id = $5`;
+    const params: unknown[] = [
+      delivery.status,
+      delivery.lastAttemptAt ?? null,
+      delivery.deliveredAt ?? null,
+      delivery.lastError ?? null,
+      id,
+    ];
+    if (userId) {
+      query += ` AND user_id = $6`;
+      params.push(userId);
+    }
+    await queryWrite(query, params);
   }
 
   async findByReferenceNumber(

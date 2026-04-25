@@ -1,6 +1,4 @@
 import path from "path";
-// Serve SEP-1 stellar.toml at /.well-known/stellar.toml
-app.use("/.well-known", express.static(path.join(__dirname, "../public/.well-known")));
 import "./tracer";
 
 import express, { NextFunction, Request, Response } from "express";
@@ -100,6 +98,8 @@ validateStellarNetwork();
 logStellarNetwork();
 
 const app = express();
+// Serve SEP-1 stellar.toml at /.well-known/stellar.toml
+app.use("/.well-known", express.static(path.join(__dirname, "../public/.well-known")));
 const PORT = process.env.PORT || 3000;
 const SHUTDOWN_TIMEOUT_MS = parseInt(
   process.env.SHUTDOWN_TIMEOUT_MS || "30000",

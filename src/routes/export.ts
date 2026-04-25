@@ -313,60 +313,11 @@ export function createExportRoutes(
         }
       };
 
-    const releaseClient = () => {
-      if (client && !released) {
-        released = true;
-        client.release();
-      }
-    };
-
-    try {
-      const filters = parseTransactionExportFilters(req.query);
-      const { text, values } = buildTransactionExportQuery(filters);
-
-      client = await db.connect();
-      const queryStream = createQueryStream(text, values);
-      const rowStream = client.query(queryStream);
-
-      const format = req.query.format === "json" ? "json" : "csv";
-      const filename = `transactions-${new Date().toISOString().slice(0, 10)}.${format}`;
-
-      res.status(200);
-      res.setHeader("Content-Type", format === "json" ? "application/json" : "text/csv; charset=utf-8");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${filename}"`,
-      );
-
-      let transform: Transform;
-      if (format === "csv") {
-        res.write(`${CSV_HEADERS.join(",")}\n`);
-        transform = new Transform({
-          objectMode: true,
-          transform(chunk: Record<string, unknown>, _encoding, callback) {
-            callback(null, transactionRowToCsv(chunk));
-          },
-        });
-      } else {
-        let first = true;
-        res.write("[\n");
-        transform = new Transform({
-          objectMode: true,
-          transform(chunk: Record<string, unknown>, _encoding, callback) {
-            const data = (first ? "" : ",\n") + JSON.stringify(chunk, null, 2);
-            first = false;
-            callback(null, data);
-          },
-          flush(callback) {
-            res.write("\n]");
-            callback();
-          },
-        });
-      }
-
-      res.on("close", () => {
-        if ("destroy" in rowStream && typeof rowStream.destroy === "function") {
-          rowStream.destroy();
+      try {
+        const filters = parseTransactionExportFilters(req.query);
+        const scopedUserId = getScopedUserId(req);
+        if (scopedUserId) {
+          filters.userId = scopedUserId;
         }
         const { text, values } = buildTransactionExportQuery(filters);
 
@@ -374,22 +325,48 @@ export function createExportRoutes(
         const queryStream = createQueryStream(text, values);
         const rowStream = client.query(queryStream);
 
-        const filename = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+        const format = req.query.format === "json" ? "json" : "csv";
+        const filename = `transactions-${new Date().toISOString().slice(0, 10)}.${format}`;
+
         res.status(200);
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader(
+          "Content-Type",
+          format === "json" ? "application/json" : "text/csv; charset=utf-8",
+        );
         res.setHeader(
           "Content-Disposition",
           `attachment; filename="${filename}"`,
         );
-        res.write(`${CSV_HEADERS.join(",")}\n`);
 
-        const csvTransform = new Transform({
-          objectMode: true,
-          transform(chunk: Record<string, unknown>, _encoding, callback) {
-            callback(null, transactionRowToCsv(chunk));
-          },
-        });
+        let transform: Transform;
+        if (format === "csv") {
+          res.write(`${CSV_HEADERS.join(",")}\n`);
+          transform = new Transform({
+            objectMode: true,
+            transform(chunk: Record<string, unknown>, _encoding, callback) {
+              callback(null, transactionRowToCsv(chunk));
+            },
+          });
+        } else {
+          let first = true;
+          res.write("[\n");
+          transform = new Transform({
+            objectMode: true,
+            transform(chunk: Record<string, unknown>, _encoding, callback) {
+              const data =
+                (first ? "" : ",\n") + JSON.stringify(chunk, null, 2);
+              first = false;
+              callback(null, data);
+            },
+            flush(callback) {
+              res.write("\n]");
+              callback();
+            },
+          });
+        }
 
+        // Destroy the query stream and release the DB client if the client
+        // disconnects before the pipeline finishes.
         res.on("close", () => {
           if (
             "destroy" in rowStream &&
@@ -400,30 +377,28 @@ export function createExportRoutes(
           releaseClient();
         });
 
-      pipeline(
-        rowStream,
-        transform,
-        res,
-        (error) => {
+        pipeline(rowStream, transform, res, (error) => {
           releaseClient();
           if (error) {
-            console.error("Transaction CSV export failed:", error);
+            console.error("Transaction export pipeline failed:", error);
           }
-        },
-      );
-    } catch (error) {
-      releaseClient();
-      const message =
-        error instanceof Error ? error.message : "Failed to export transactions";
-      const statusCode = message.startsWith("Invalid") ? 400 : 500;
-      if (!res.headersSent) {
-        res.status(statusCode).json({ error: message });
-      } else {
-        console.error("Error after headers sent:", message);
-        res.end();
+        });
+      } catch (error) {
+        releaseClient();
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to export transactions";
+        const statusCode = message.startsWith("Invalid") ? 400 : 500;
+        if (!res.headersSent) {
+          res.status(statusCode).json({ error: message });
+        } else {
+          console.error("Error after headers sent:", message);
+          res.end();
+        }
       }
-    }
-  });
+    },
+  );
 
   return router;
 }
