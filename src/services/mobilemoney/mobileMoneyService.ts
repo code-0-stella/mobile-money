@@ -14,8 +14,7 @@ export type ProviderTransactionStatus =
   | "failed"
   | "pending"
   | "unknown";
-
-interface MobileMoneyProvider {
+export interface MobileMoneyProvider {
   requestPayment(
     phoneNumber: string,
     amount: string,

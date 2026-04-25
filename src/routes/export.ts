@@ -313,13 +313,6 @@ export function createExportRoutes(
         }
       };
 
-    const releaseClient = () => {
-      if (client && !released) {
-        released = true;
-        client.release();
-      }
-    };
-
     try {
       const filters = parseTransactionExportFilters(req.query);
       const { text, values } = buildTransactionExportQuery(filters);
@@ -368,37 +361,8 @@ export function createExportRoutes(
         if ("destroy" in rowStream && typeof rowStream.destroy === "function") {
           rowStream.destroy();
         }
-        const { text, values } = buildTransactionExportQuery(filters);
-
-        client = await db.connect();
-        const queryStream = createQueryStream(text, values);
-        const rowStream = client.query(queryStream);
-
-        const filename = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
-        res.status(200);
-        res.setHeader("Content-Type", "text/csv; charset=utf-8");
-        res.setHeader(
-          "Content-Disposition",
-          `attachment; filename="${filename}"`,
-        );
-        res.write(`${CSV_HEADERS.join(",")}\n`);
-
-        const csvTransform = new Transform({
-          objectMode: true,
-          transform(chunk: Record<string, unknown>, _encoding, callback) {
-            callback(null, transactionRowToCsv(chunk));
-          },
-        });
-
-        res.on("close", () => {
-          if (
-            "destroy" in rowStream &&
-            typeof rowStream.destroy === "function"
-          ) {
-            rowStream.destroy();
-          }
-          releaseClient();
-        });
+        releaseClient();
+      });
 
       pipeline(
         rowStream,

@@ -38,7 +38,7 @@ export class HtlcService {
       StellarSdk.nativeToScVal(params.receiverAddress, { type: "address" }),
       StellarSdk.nativeToScVal(params.tokenAddress, { type: "address" }),
       StellarSdk.nativeToScVal(params.amount, { type: "i128" }),
-      StellarSdk.nativeToScVal(Buffer.from(params.hashlock, "hex"), { type: "bytesN", size: 32 }),
+      StellarSdk.nativeToScVal(Buffer.from(params.hashlock, "hex"), ({ type: "bytesN" } as any)),
       StellarSdk.nativeToScVal(params.timelock, { type: "u64" }),
     ];
 
@@ -66,7 +66,7 @@ export class HtlcService {
 
     // fn claim(env: Env, preimage: BytesN<32>)
     const args = [
-      StellarSdk.nativeToScVal(Buffer.from(params.preimage, "hex"), { type: "bytesN", size: 32 }),
+      StellarSdk.nativeToScVal(Buffer.from(params.preimage, "hex"), ({ type: "bytesN" } as any)),
     ];
 
     const operation = spec.call("claim", ...args);

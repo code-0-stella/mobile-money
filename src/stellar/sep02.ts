@@ -173,9 +173,7 @@ export class FederationService {
 
 const federationQuerySchema = z.object({
   q: z.string().min(1, "q is required"),
-  type: z.enum(["name", "id", "txid", "forward"], {
-    errorMap: () => ({ message: "type must be one of: name, id, txid, forward" }),
-  }),
+  type: z.enum(["name", "id", "txid", "forward"] as const),
 });
 
 // ============================================================================
@@ -212,7 +210,7 @@ export function createFederationRouter(db: Pool): Router {
   router.get("/", federationRateLimit, async (req: Request, res: Response) => {
     const parsed = federationQuerySchema.safeParse(req.query);
     if (!parsed.success) {
-      return res.status(400).json({ detail: parsed.error.errors[0].message });
+      return res.status(400).json({ detail: parsed.error?.issues?.[0]?.message ?? 'Invalid input' });
     }
 
     const { q, type } = parsed.data;
