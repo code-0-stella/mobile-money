@@ -1,7 +1,8 @@
+import "./tracer";
 import path from "path";
+import express, { NextFunction, Request, Response } from "express";
 // Serve SEP-1 stellar.toml at /.well-known/stellar.toml
 app.use("/.well-known", express.static(path.join(__dirname, "../public/.well-known")));
-import express, { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
