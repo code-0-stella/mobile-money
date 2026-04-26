@@ -167,6 +167,17 @@ npm run docker:dev:down
 
 Includes hot reload and debugger on port `9229`.
 
+The development compose stack now also starts a local provider mock server on
+`http://localhost:4010` and points MTN/Airtel traffic at it automatically.
+Use `?scenario=success|failed|pending` or `x-mock-scenario` to control mock
+responses, and `?delayMs=...` or `x-mock-delay-ms` to simulate timeouts.
+
+To run only the mock server outside Docker:
+
+```bash
+npm run provider-mock:dev
+```
+
 ### Docker Production
 
 ```bash
@@ -795,3 +806,23 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 **Built with ❤️ for financial inclusion in Africa**
+
+## 📚 Internal API Documentation Portal (Docusaurus + Redoc)
+
+This repository now includes a dedicated documentation portal in `docs-portal/` that transforms `openapi.yaml` into a searchable, partner-friendly API reference.
+
+### Run docs portal locally
+
+```bash
+npm run docs:dev
+```
+
+### Build docs portal
+
+```bash
+npm run docs:build
+```
+
+### Release deployment
+
+On every GitHub Release publication, the workflow `.github/workflows/api-docs-portal.yml` builds `docs-portal` and deploys it to GitHub Pages.
