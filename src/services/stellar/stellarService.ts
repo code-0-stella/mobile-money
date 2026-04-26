@@ -275,4 +275,85 @@ export class StellarService {
       throw error;
     }
   }
+
+  /**
+   * Enables clawback capability on the issuance account.
+   * This sets the AUTH_CLAWBACK_ENABLED flag (0x8).
+   */
+  async enableClawback(): Promise<void> {
+    if (this.isMockMode || !this.issuerKeypair) {
+      console.log("Mock: Enabled clawback on issuer account");
+      return;
+    }
+
+    try {
+      const account = await this.server.loadAccount(
+        this.issuerKeypair.publicKey(),
+      );
+      const transaction = new StellarSdk.TransactionBuilder(account, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: getNetworkPassphrase(),
+      })
+        .addOperation(
+          StellarSdk.Operation.setOptions({
+            setFlags: StellarSdk.xdr.AccountFlags.authClawbackEnabledFlag().value,
+          }),
+        )
+        .setTimeout(30)
+        .build();
+
+      transaction.sign(this.issuerKeypair);
+      await this.server.submitTransaction(transaction);
+      console.log("Clawback capability enabled on issuance account");
+    } catch (error) {
+      console.error("Failed to enable clawback capability:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Executes a clawback operation for a specific address and amount.
+   */
+  async executeClawback(
+    fromAddress: string,
+    amount: string,
+  ): Promise<{ hash?: string }> {
+    if (this.isMockMode || !this.issuerKeypair) {
+      console.log("Mock Stellar clawback:", { fromAddress, amount });
+      return { hash: "mock_clawback_hash" };
+    }
+
+    try {
+      const paymentAsset = getConfiguredPaymentAsset();
+      if (paymentAsset.isNative()) {
+        throw new Error("Cannot claw back native XLM");
+      }
+
+      const account = await this.server.loadAccount(
+        this.issuerKeypair.publicKey(),
+      );
+      const transaction = new StellarSdk.TransactionBuilder(account, {
+        fee: StellarSdk.BASE_FEE,
+        networkPassphrase: getNetworkPassphrase(),
+      })
+        .addOperation(
+          StellarSdk.Operation.clawback({
+            from: fromAddress,
+            asset: paymentAsset,
+            amount: amount,
+          }),
+        )
+        .setTimeout(30)
+        .build();
+
+      transaction.sign(this.issuerKeypair);
+      const response = await this.server.submitTransaction(transaction);
+      console.log("Stellar clawback successful", { hash: response.hash });
+
+      return { hash: response.hash };
+    } catch (error) {
+      console.error("Stellar clawback failed:", error);
+      throw error;
+    }
+  }
 }

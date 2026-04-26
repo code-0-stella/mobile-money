@@ -17,6 +17,7 @@ export enum TransactionStatus {
   Failed = "failed",
   Cancelled = "cancelled",
   Review = "review",
+  ClawedBack = "clawed_back",
 }
 
 const MAX_TAGS = 10;
