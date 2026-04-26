@@ -71,6 +71,11 @@ export const env = cleanEnv(process.env, {
     default: "86400",
     desc: "TTL in seconds for Automatic Persisted Query entries in Redis (default: 86400 = 24h)",
   }),
+  AML_API_KEY: str({
+    default: "",
+    desc: "API key for third-party AML/sanction screening provider (e.g. Elliptic, Chainalysis)",
+    example: "ell_live_xxxxxxxxxxxx",
+  }),
 });
 
 // Re-export specific values for convenience

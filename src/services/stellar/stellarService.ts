@@ -3,6 +3,7 @@ import { getStellarServer, getNetworkPassphrase } from "../../config/stellar";
 import dotenv from "dotenv";
 import { transactionTotal, transactionErrorsTotal } from "../../utils/metrics";
 import { AssetService, getConfiguredPaymentAsset } from "./assetService";
+import { sanctionService } from "../sanctionService";
 
 dotenv.config();
 
@@ -55,11 +56,21 @@ export class StellarService {
     }
   }
 
-  async sendPayment(destinationAddress: string, amount: string): Promise<{
+  async sendPayment(
+    destinationAddress: string,
+    amount: string,
+    senderName?: string,
+    receiverName?: string,
+  ): Promise<{
     hash?: string;
     submittedAt?: Date;
   }> {
     try {
+      // Pre-flight sanction screening — blocks both sender and receiver
+      if (senderName && receiverName) {
+        await sanctionService.checkParties(senderName, receiverName);
+      }
+
       // MOCK MODE (no crash)
       if (this.isMockMode || !this.issuerKeypair) {
         console.log("Mock Stellar payment:", {

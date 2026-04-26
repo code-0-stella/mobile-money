@@ -15,6 +15,7 @@ import { SmsService } from "../services/sms";
 import { notifyTransactionWebhook, WebhookService } from "../services/webhook";
 import { pushNotificationService } from "../services/push";
 import { capturePersistentFailure } from "./dlq";
+import { queryRead } from "../config/database";
 const transactionModel = new TransactionModel();
 const mobileMoneyService = new MobileMoneyService();
 const stellarService = new StellarService();
@@ -125,6 +126,23 @@ async function updateProgress(transactionId: string, progress: number) {
   }
 }
 
+/** Resolves a user's full name from KYC data for sanction screening. */
+async function resolveKycName(userId: string): Promise<string | null> {
+  try {
+    const result = await queryRead(
+      `SELECT applicant_data->>'first_name' AS "firstName",
+              applicant_data->>'last_name'  AS "lastName"
+       FROM kyc_applicants WHERE user_id = $1 LIMIT 1`,
+      [userId],
+    );
+    if (!result.rows.length) return null;
+    const { firstName, lastName } = result.rows[0];
+    return `${firstName ?? ""} ${lastName ?? ""}`.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 async function processTransaction(data: TransactionJobData): Promise<TransactionJobResult> {
   const {
     transactionId,
@@ -165,6 +183,13 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
     },
   };
 
+  // Resolve sender name for sanction screening (best-effort; falls back to phone number)
+  const txRow = await transactionModel.findById(transactionId);
+  const senderName =
+    (txRow?.userId ? await resolveKycName(txRow.userId) : null) ?? phoneNumber;
+  // Receiver is the mobile money account holder identified by their phone number
+  const receiverName = phoneNumber;
+
   const sendTxnSms = async (
     kind: "transaction_completed" | "transaction_failed",
     errorMessage?: string,
@@ -194,7 +219,7 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
   };
 
         const stellarResult = await withRetry(
-          () => stellarService.sendPayment(stellarAddress, amount),
+          () => stellarService.sendPayment(stellarAddress, amount, senderName, receiverName),
           retryConfig,
         );
 
@@ -247,7 +272,7 @@ async function processTransaction(data: TransactionJobData): Promise<Transaction
       await updateProgress(transactionId, 70);
 
       await withRetry(
-        () => stellarService.sendPayment(stellarAddress, amount),
+        () => stellarService.sendPayment(stellarAddress, amount, senderName, receiverName),
         retryConfig,
       );
 
