@@ -19,6 +19,20 @@ export enum TransactionStatus {
   Review = "review",
 }
 
+export interface Transaction {
+  id: string;
+  referenceNumber: string;
+  type: string;
+  amount: string;
+  phoneNumber: string;
+  provider: string;
+  status: TransactionStatus;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  [key: string]: any;
+}
+
 const MAX_TAGS = 10;
 const TAG_REGEX = /^[a-z0-9-]+$/;
 const MAX_METADATA_BYTES = 10240;
@@ -217,5 +231,19 @@ export class TransactionModel {
     );
 
     return res.rows[0];
+  }
+
+  async findCompletedByUserSince(userId: string, since: Date): Promise<Transaction[]> {
+    const query = `
+      SELECT ${TRANSACTION_SELECT_COLUMNS}
+      FROM transactions
+      WHERE user_id = $1
+        AND status = 'completed'
+        AND created_at >= $2
+      ORDER BY created_at DESC
+    `;
+
+    const result = await queryRead(query, [userId, since]);
+    return result.rows.map(mapTransactionRow);
   }
 }
