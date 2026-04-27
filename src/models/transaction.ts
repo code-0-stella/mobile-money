@@ -20,6 +20,20 @@ export enum TransactionStatus {
   ClawedBack = "clawed_back",
 }
 
+export interface Transaction {
+  id: string;
+  referenceNumber: string;
+  type: string;
+  amount: string;
+  phoneNumber: string;
+  provider: string;
+  status: TransactionStatus;
+  userId: string;
+  createdAt: Date;
+  updatedAt: Date;
+  [key: string]: any;
+}
+
 const MAX_TAGS = 10;
 const TAG_REGEX = /^[a-z0-9-]+$/;
 const MAX_METADATA_BYTES = 10240;
@@ -220,44 +234,17 @@ export class TransactionModel {
     return res.rows[0];
   }
 
-  /**
-   * Find pending transactions by status, provider, and type.
-   * Used by batch payout worker to group transactions for efficient processing.
-   */
-  async findByStatusAndProvider(
-    status: TransactionStatus,
-    provider: string,
-    type: "deposit" | "withdraw",
-    limit = 50,
-  ) {
-    const capped = Math.min(Math.max(limit, 1), 50);
+  async findCompletedByUserSince(userId: string, since: Date): Promise<Transaction[]> {
+    const query = `
+      SELECT ${TRANSACTION_SELECT_COLUMNS}
+      FROM transactions
+      WHERE user_id = $1
+        AND status = 'completed'
+        AND created_at >= $2
+      ORDER BY created_at DESC
+    `;
 
-    const result = await queryRead(
-      `SELECT ${TRANSACTION_SELECT_COLUMNS}
-        FROM transactions
-        WHERE status = $1
-          AND provider = $2
-          AND type = $3
-        ORDER BY created_at ASC
-        LIMIT $4`,
-      [status, provider.toLowerCase(), type, capped],
-    );
-
-    return result.rows.map(mapTransactionRow).filter((t: any) => t !== null);
-  }
-
-  async patchMetadata(id: string, patch: Record<string, unknown>) {
-    validateMetadata(patch);
-
-    const result = await queryWrite(
-      `UPDATE transactions
-        SET metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2
-        RETURNING ${TRANSACTION_SELECT_COLUMNS}`,
-      [JSON.stringify(patch), id],
-    );
-
-    return mapTransactionRow(result.rows[0]);
+    const result = await queryRead(query, [userId, since]);
+    return result.rows.map(mapTransactionRow);
   }
 }
