@@ -15,6 +15,7 @@ import { runProviderHealthCheckJob } from "./providerHealthCheck";
 import { runKycTierUpgradeJob } from "./kycTierUpgradeJob";
 import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
+import { runDailyProviderReconciliation } from "./providerReconciliationJob";
 
 interface JobConfig {
   name: string;
@@ -76,6 +77,12 @@ const JOBS: JobConfig[] = [
     // Every 5 minutes - polls provider APIs for uptime and alerts on outages
     schedule: process.env.PROVIDER_HEALTH_CHECK_CRON || "*/5 * * * *",
     handler: runProviderHealthCheckJob,
+  },
+  {
+    name: "provider-reconciliation",
+    // Daily at 4:00 AM - runs automated reconciliation against provider CSV reports
+    schedule: process.env.PROVIDER_RECONCILIATION_CRON || "0 4 * * *",
+    handler: runDailyProviderReconciliation,
   },
   {
     name: "monthly-invoice",
