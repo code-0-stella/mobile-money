@@ -80,6 +80,8 @@ export class EmailService {
         provider: transaction.provider.toUpperCase(),
         phoneNumber: transaction.phoneNumber,
         stellarAddress: transaction.stellarAddress,
+        transactionHash: txHash,
+        stellarExpertUrl,
         createdAt: new Date(transaction.createdAt).toLocaleString(resolvedLocale),
         locale: resolvedLocale,
         year: new Date().getFullYear(),
