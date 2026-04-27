@@ -20,8 +20,9 @@ import { getQueueStats } from "../queue/transactionQueue";
 import { redisClient } from "../config/redis";
 import { checkReplicaHealth, pool } from "../config/database";
 import { UserModel } from "../models/users";
-import { TransactionModel } from "../models/transaction";
-import { TransactionStatus } from "../models/transaction";
+import { TransactionModel, TransactionStatus } from "../models/transaction";
+import { StellarService } from "../services/stellar/stellarService";
+import { ledgerService } from "../services/ledgerService";
 import multer from "multer";
 import { parseCSV, reconcileTransactions } from "../services/csvReconciliation";
 import {
@@ -2217,6 +2218,98 @@ router.patch(
     } catch (error) {
       console.error("[compliance/docs:update]", error);
       res.status(500).json({ message: "Failed to update compliance document" });
+    }
+  },
+);
+
+/**
+ * =========================
+ * STELLAR OPERATIONS
+ * =========================
+ */
+
+// POST /api/admin/stellar/enable-clawback
+router.post(
+  "/stellar/enable-clawback",
+  requireAdmin,
+  requireSuperAdmin,
+  logAdminAction("ENABLE_STELLAR_CLAWBACK"),
+  async (_req: Request, res: Response) => {
+    try {
+      const stellarService = new StellarService();
+      await stellarService.enableClawback();
+      res.json({ message: "Clawback capability enabled on issuance account" });
+    } catch (err) {
+      console.error("Error enabling clawback:", err);
+      res.status(500).json({
+        message: "Failed to enable clawback capability",
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  },
+);
+
+// POST /api/admin/stellar/clawback
+router.post(
+  "/stellar/clawback",
+  requireAdmin,
+  logAdminAction("EXECUTE_STELLAR_CLAWBACK"),
+  async (req: Request, res: Response) => {
+    try {
+      const { transactionId, reason } = req.body;
+
+      if (!transactionId) {
+        return res.status(400).json({ message: "transactionId is required" });
+      }
+      if (!reason) {
+        return res
+          .status(400)
+          .json({ message: "reason is required for clawback" });
+      }
+
+      const transaction = await transactionModel.findById(transactionId);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+
+      if (transaction.status !== TransactionStatus.Completed) {
+        return res.status(400).json({
+          message: `Cannot claw back transaction in status: ${transaction.status}`,
+        });
+      }
+
+      const stellarService = new StellarService();
+      const { hash } = await stellarService.executeClawback(
+        transaction.stellarAddress,
+        transaction.amount,
+      );
+
+      // Handle accounting reversal
+      await ledgerService.postClawback(
+        parseFloat(transaction.amount),
+        transaction.referenceNumber,
+        transaction.id,
+        (req as AuthRequest).user?.id || "admin",
+        reason,
+      );
+
+      // Update transaction status
+      await transactionModel.updateStatus(
+        transactionId,
+        TransactionStatus.ClawedBack,
+      );
+
+      res.json({
+        message: "Transaction clawed back successfully",
+        stellarHash: hash,
+        transactionId,
+      });
+    } catch (err) {
+      console.error("Error executing clawback:", err);
+      res.status(500).json({
+        message: "Failed to execute clawback",
+        error: err instanceof Error ? err.message : "Unknown error",
+      });
     }
   },
 );
