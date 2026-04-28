@@ -87,6 +87,8 @@ import feeStrategiesRouter from "./routes/feeStrategies";
 import crossChainRouter from "./routes/crossChain";
 import reconciliationRoutes from "./routes/reconciliation";
 import exchangeRateBufferRoutes from "./routes/exchangeRateBuffers";
+import adminAssetRoutes from "./routes/admin/assets";
+
 
 
 // 1. Import Sentry Middleware
@@ -373,6 +375,8 @@ app.use("/api/fee-strategies", feeStrategiesRouter);
 app.use("/api/cross-chain", crossChainRouter);
 app.use("/api/reconciliation", reconciliationRoutes);
 app.use("/api/exchange-rate-buffers", exchangeRateBufferRoutes);
+app.use("/api/admin/assets", adminAssetRoutes);
+
 
 
 // GDPR
