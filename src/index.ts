@@ -85,6 +85,11 @@ import tomlRouter from "./routes/toml";
 import feesRouter from "./routes/fees";
 import feeStrategiesRouter from "./routes/feeStrategies";
 import crossChainRouter from "./routes/crossChain";
+import reconciliationRoutes from "./routes/reconciliation";
+import exchangeRateBufferRoutes from "./routes/exchangeRateBuffers";
+import adminAssetRoutes from "./routes/admin/assets";
+
+
 
 // 1. Import Sentry Middleware
 import { initSentry, sentryBreadcrumbMiddleware } from "./middleware/sentry";
@@ -368,6 +373,11 @@ app.use("/api/kyc", createKYCRoutes(pool));
 app.use("/api/fees", feesRouter);
 app.use("/api/fee-strategies", feeStrategiesRouter);
 app.use("/api/cross-chain", crossChainRouter);
+app.use("/api/reconciliation", reconciliationRoutes);
+app.use("/api/exchange-rate-buffers", exchangeRateBufferRoutes);
+app.use("/api/admin/assets", adminAssetRoutes);
+
+
 
 // GDPR
 app.use("/api/gdpr", privacyRoutes);
