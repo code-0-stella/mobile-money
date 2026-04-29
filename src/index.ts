@@ -57,7 +57,7 @@ import {
 } from "./config/redis";
 import { createOAuthRouter } from "./auth/oauth";
 import { applySecurityMiddleware } from "./config/express";
-import { pool, checkDRHealth, isDRMode } from "./config/database";
+import { pool } from "./config/database";
 import {
   globalTimeout,
   haltOnTimedout,
@@ -70,21 +70,27 @@ import { i18nMiddleware } from "./utils/i18n";
 import { metricsMiddleware } from "./middleware/metrics";
 import { validateStellarNetwork, logStellarNetwork } from "./config/stellar";
 import { sessionAnomalyLogger } from "./services/logger";
-import logger from "./utils/logger";
 import { HealthCheckResponse, ReadinessCheckResponse } from "./types/api";
 import { privacyRoutes } from "./routes/privacy";
 import { developerDashboardRoutes } from "./routes/developerDashboard";
 import { travelRuleRoutes } from "./routes/travelRule";
+import mtnCallbacksRouter from "./routes/mtnCallbacks";
 import sep31Router from "./stellar/sep31";
-import { rateLimitMiddleware } from "./middleware/rateLimitRedis";
 import sep24Router from "./stellar/sep24";
 import sep38Router from "./stellar/sep38";
 import { createSep12Router } from "./stellar/sep12";
 import { createSep10Router } from "./stellar/sep10";
+import { createAdminSep10Router } from "./stellar/adminSep10";
 import tomlRouter from "./routes/toml";
 import feesRouter from "./routes/fees";
 import feeStrategiesRouter from "./routes/feeStrategies";
 import crossChainRouter from "./routes/crossChain";
+import reconciliationRoutes from "./routes/reconciliation";
+import exchangeRateBufferRoutes from "./routes/exchangeRateBuffers";
+import adminAssetRoutes from "./routes/admin/assets";
+import settingsRoutes from "./routes/settings";
+
+
 
 // 1. Import Sentry Middleware
 import { initSentry, sentryBreadcrumbMiddleware } from "./middleware/sentry";
@@ -216,6 +222,7 @@ app.get("/health", (_req: Request, res: Response) => {
   const body: HealthCheckResponse = {
     status: "ok",
     timestamp: new Date().toISOString(),
+    gitHash: process.env.BUILD_HASH,
   };
   res.json(body);
 });
@@ -251,13 +258,6 @@ app.get("/ready", async (_req: Request, res: Response) => {
   } catch (err) {
     console.error("Redis check failed", err);
     allReady = false;
-  }
-
-  // DR replica health (informational — does not affect readiness)
-  const drHealth = await checkDRHealth();
-  if (drHealth !== null) {
-    checks.dr_replica = drHealth.healthy ? "ok" : "degraded";
-    checks.dr_mode = isDRMode() ? "active" : "standby";
   }
 
   const body: ReadinessCheckResponse = {
@@ -366,6 +366,7 @@ app.use("/api/transactions/bulk", bulkRoutes);
 app.use("/api/disputes", disputeRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/contacts", contactsRoutes);
+app.use("/api/mtn", mtnCallbacksRouter);
 app.use("/api/reports", reportsRoutes);
 app.use("/api/fees", feesRoutes);
 app.use("/api/users", userRoutes);
@@ -373,6 +374,12 @@ app.use("/api/kyc", createKYCRoutes(pool));
 app.use("/api/fees", feesRouter);
 app.use("/api/fee-strategies", feeStrategiesRouter);
 app.use("/api/cross-chain", crossChainRouter);
+app.use("/api/reconciliation", reconciliationRoutes);
+app.use("/api/exchange-rate-buffers", exchangeRateBufferRoutes);
+app.use("/api/admin/assets", adminAssetRoutes);
+app.use("/api/settings", settingsRoutes);
+
+
 
 // GDPR
 app.use("/api/gdpr", privacyRoutes);
@@ -380,6 +387,7 @@ app.use("/api/developer", developerDashboardRoutes);
 app.use("/api/admin", requireAuth, adminRoutes);
 app.use("/api/admin/providers/status", requireAuth, providerStatusRouter);
 app.use("/api/admin/kyc-upgrades", requireAuth, kycTierUpgradeRoutes);
+app.use("/api/admin/auth", createAdminSep10Router());
 app.use("/sep10", createSep10Router());
 app.use("/sep31", sep31Router);
 app.use("/sep24", sep24Router);
@@ -575,15 +583,15 @@ async function initializeRuntime(): Promise<void> {
     server = http2Server as unknown as Server;
   } else {
     server = app.listen(PORT, () =>
-      logger.info(`HTTP/1.1 server running on http://localhost:${PORT}`),
+      console.log(`HTTP/1.1 server running on http://localhost:${PORT}`),
     );
 
     wsManager = new WebSocketManager(server);
-    logger.info("WebSocket server attached");
+    console.log("WebSocket server attached");
 
     // Start Apollo Server with APQ enabled (must run after HTTP server is created)
     await startApolloServer(app, server);
-    logger.info("Apollo GraphQL server started at /graphql");
+    console.log("Apollo GraphQL server started at /graphql");
   }
 }
 

@@ -131,12 +131,20 @@ npm test -- path/to/test.ts
 
 # Run with coverage
 npm run test:coverage
+
+# Run Pact contract tests
+npm run test:pact
 ```
 
 **Test Coverage Requirements:**
 - Minimum 70% coverage for all metrics
 - New features must have >80% coverage
 - Bug fixes must include regression tests
+
+**Contract Testing:**
+- Provider API changes require updating Pact contracts
+- Run `npm run test:pact` to verify contracts
+- See `tests/pact/README.md` for details
 
 ### Code Review Checklist
 
@@ -316,6 +324,20 @@ New to the project? Look for issues labeled `good first issue`:
 - Update documentation
 - Fix typos
 - Add logging
+
+## 🔔 CI Slack Notifications
+
+When a CI run fails on the `main` branch, an automatic Slack notification is sent with the workflow name, triggering actor, commit SHA, and a direct link to the failed run.
+
+### Required secret
+
+| Secret name | Where to get it |
+|---|---|
+| `SLACK_WEBHOOK_URL` | Create an [Incoming Webhook](https://api.slack.com/messaging/webhooks) in your Slack workspace, then add the generated URL as a repository secret under **Settings → Secrets and variables → Actions**. |
+
+Notifications fire **only** on `main` branch failures. Passing builds and pull-request runs are never notified.
+
+---
 
 ## 🔒 Security Issues
 
