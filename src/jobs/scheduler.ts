@@ -16,6 +16,8 @@ import { runKycTierUpgradeJob } from "./kycTierUpgradeJob";
 import { runLiquidityRebalanceJob } from "./liquidityRebalanceJob";
 import { runCrossChainMonitorJob } from "./crossChainMonitorJob";
 import { runDailyProviderReconciliation } from "./providerReconciliationJob";
+import { runReconciliationJob } from "./reconciliationJob";
+
 
 interface JobConfig {
   name: string;
@@ -89,6 +91,12 @@ const JOBS: JobConfig[] = [
     // 1st of every month at midnight
     schedule: "0 0 1 * *",
     handler: runMonthlyInvoiceJob,
+  },
+  {
+    name: "reconciliation",
+    // Daily at 5:00 AM
+    schedule: process.env.RECONCILIATION_CRON || "0 5 * * *",
+    handler: runReconciliationJob,
   },
 ];
 
